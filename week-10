@@ -1,0 +1,94 @@
+bmscecse@bmscecse-HP-Elite-Tower-800-G9-Desktop-PC:~$ spark-shell
+26/04/24 12:11:09 WARN Utils: Your hostname, bmscecse-HP-Elite-Tower-800-G9-Desktop-PC resolves to a loopback address: 127.0.1.1; using 10.124.2.8 instead (on interface eno1)
+26/04/24 12:11:09 WARN Utils: Set SPARK_LOCAL_IP if you need to bind to another address
+WARNING: An illegal reflective access operation has occurred
+WARNING: Illegal reflective access by org.apache.spark.unsafe.Platform (file:/opt/spark/jars/spark-unsafe_2.12-3.0.3.jar) to constructor java.nio.DirectByteBuffer(long,int)
+WARNING: Please consider reporting this to the maintainers of org.apache.spark.unsafe.Platform
+WARNING: Use --illegal-access=warn to enable warnings of further illegal reflective access operations
+WARNING: All illegal access operations will be denied in a future release
+26/04/24 12:11:09 WARN NativeCodeLoader: Unable to load native-hadoop library for your platform... using builtin-java classes where applicable
+Using Spark's default log4j profile: org/apache/spark/log4j-defaults.properties
+Setting default log level to "WARN".
+To adjust logging level use sc.setLogLevel(newLevel). For SparkR, use setLogLevel(newLevel).
+Spark context Web UI available at http://10.124.2.8:4040
+Spark context available as 'sc' (master = local[*], app id = local-1777012872211).
+Spark session available as 'spark'.
+Welcome to
+      ____              __
+     / __/__  ___ _____/ /__
+    _\ \/ _ \/ _ `/ __/  '_/
+   /___/ .__/\_,_/_/ /_/\_\   version 3.0.3
+      /_/
+         
+Using Scala version 2.12.10 (OpenJDK 64-Bit Server VM, Java 11.0.22)
+Type in expressions to have them evaluated.
+Type :help for more information.
+
+scala> import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.SparkSession
+
+scala> import org.apache.spark.sql.functions._
+import org.apache.spark.sql.functions._
+
+scala> 
+
+scala> val spark = SparkSession.builder.appName("TextCleaningStream").master("local[*]").getOrCreate()
+26/04/24 12:11:40 WARN SparkSession$Builder: Using an existing SparkSession; some spark core configurations may not take effect.
+spark: org.apache.spark.sql.SparkSession = org.apache.spark.sql.SparkSession@768511c3
+
+scala> import spark.implicits._
+import spark.implicits._
+
+scala> 
+
+scala> val lines = spark.readStream.format("socket").option("host","localhost").option("port",9999).load()
+26/04/24 12:11:41 WARN TextSocketSourceProvider: The socket source should not be used for production applications! It does not support recovery.
+lines: org.apache.spark.sql.DataFrame = [value: string]
+
+scala> val words = lines.as[String]
+words: org.apache.spark.sql.Dataset[String] = [value: string]
+
+scala> 
+
+scala> val stopWords = Seq("is","the","a","an","and","to")
+stopWords: Seq[String] = List(is, the, a, an, and, to)
+
+scala> 
+
+scala> val cleaned = words.map(line => { val lower = line.toLowerCase; val noSpace = lower.trim.replaceAll("\\s+"," "); val noPunct = noSpace.replaceAll("[^a-zA-Z ]",""); val filtered = noPunct.split(" ").filter(word => !stopWords.contains(word)); val lemmatized = filtered.map { case w if w.endsWith("ing") => w.dropRight(3); case w if w.endsWith("ed") => w.dropRight(2); case w => w }; lemmatized.mkString(" ") })
+cleaned: org.apache.spark.sql.Dataset[String] = [value: string]
+
+scala> 
+
+scala> val query = cleaned.writeStream.outputMode("append").format("console").start()
+26/04/24 12:11:42 WARN StreamingQueryManager: Temporary checkpoint location created which is deleted normally when the query didn't fail: /tmp/temporary-dac13629-b230-4749-bc3f-2c0a71128ef4. If it's required to delete it under any circumstances, please set spark.sql.streaming.forceDeleteTempCheckpointLocation to true. Important to know deleting temp checkpoint folder is best effort.
+query: org.apache.spark.sql.streaming.StreamingQuery = org.apache.spark.sql.execution.streaming.StreamingQueryWrapper@5d06081f
+
+scala> 
+
+scala> query.awaitTermination()
+-------------------------------------------
+Batch: 0
+-------------------------------------------
++-----+
+|value|
++-----+
++-----+
+
+-------------------------------------------
+Batch: 1
+-------------------------------------------
++--------------------+
+|               value|
++--------------------+
+|hi this test message|
++--------------------+
+
+-------------------------------------------
+Batch: 2
+-------------------------------------------
++--------------------+
+|               value|
++--------------------+
+|it removes stop w...|
++--------------------+
